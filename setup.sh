@@ -32,6 +32,7 @@ TARGET=aarch64-unknown-linux-musl
 BINARY=target/$TARGET/release/zte-agent
 REMOTE_BIN=/data/zte-agent
 STARTUP_SCRIPT=/data/local/tmp/start_zte_agent.sh
+DROPBEAR_BIN=/data/local/tmp/dropbear
 BINARY_CHANGED=false
 DOWNLOAD_URL="https://github.com/jesther-ai/open-u60-pro/releases/latest/download/zte-agent"
 
@@ -329,6 +330,15 @@ rcmd() {
     fi
 }
 
+# The U60 Pro's adbd uses the legacy shell protocol, which can report a
+# successful host-side exit status even when the remote command failed.
+# Emit and inspect a sentinel instead of trusting `adb shell`'s status.
+remote_test() {
+    rcmd "if $1; then echo __REMOTE_TRUE__; else echo __REMOTE_FALSE__; fi" 2>/dev/null \
+        | tr -d '\r' \
+        | grep -q '^__REMOTE_TRUE__$'
+}
+
 rpush() {
     local src="$1" dst="$2"
     if [ "$USE_SSH" = true ]; then
@@ -373,12 +383,14 @@ else
     BINARY_CHANGED=true
     ok "Binary deployed to $REMOTE_BIN."
 fi
+rcmd "chmod +x $REMOTE_BIN"
 
 # ── Step 5: Create startup script ───────────────────────────────────
 # Escape single quotes for safe embedding in sh single-quoted string
 SAFE_PASSWORD=$(printf '%s' "$AGENT_PASSWORD" | sed "s/'/'\\\\''/g")
 
-if rcmd "grep -qF '${SAFE_PASSWORD}' $STARTUP_SCRIPT 2>/dev/null"; then
+rcmd "mkdir -p /data/local/tmp"
+if remote_test "grep -qF '${SAFE_PASSWORD}' $STARTUP_SCRIPT 2>/dev/null"; then
     ok "Startup script already up to date."
 else
     info "Creating startup script..."
@@ -395,7 +407,7 @@ fi
 # ── Step 6: Update rc.local for boot persistence ────────────────────
 info "Configuring auto-start on boot..."
 RC_LINE="sh $STARTUP_SCRIPT"
-if rcmd "grep -qF '$RC_LINE' /etc/rc.local 2>/dev/null"; then
+if remote_test "grep -qF '$RC_LINE' /etc/rc.local 2>/dev/null"; then
     ok "rc.local already configured."
 else
     rcmd "grep -q '^exit 0' /etc/rc.local \
@@ -406,10 +418,20 @@ fi
 
 # ── Step 7: Start agent ─────────────────────────────────────────────
 info "Checking agent status..."
+LOGIN_PAYLOAD=$(printf '%s' "$AGENT_PASSWORD" \
+    | python3 -c 'import json, sys; print(json.dumps({"password": sys.stdin.read()}))')
+
+if [ "$USE_SSH" = true ]; then
+    AGENT_URL="http://$GATEWAY:$AGENT_PORT/api/auth/login"
+else
+    adb forward tcp:19090 tcp:$AGENT_PORT
+    AGENT_URL="http://127.0.0.1:19090/api/auth/login"
+fi
+
 AGENT_RUNNING=false
-curl -sf "http://$GATEWAY:$AGENT_PORT/api/auth/login" \
+curl -sf --max-time 2 "$AGENT_URL" \
     -H 'Content-Type: application/json' \
-    -d "{\"password\":\"$AGENT_PASSWORD\"}" >/dev/null 2>&1 && AGENT_RUNNING=true
+    -d "$LOGIN_PAYLOAD" >/dev/null 2>&1 && AGENT_RUNNING=true
 
 if [ "$BINARY_CHANGED" = true ] || [ "$AGENT_RUNNING" = false ]; then
     info "Starting zte-agent..."
@@ -423,19 +445,23 @@ fi
 
 # ── Step 8: Verify ──────────────────────────────────────────────────
 info "Verifying agent is running..."
-sleep 2
-
-if [ "$USE_SSH" = true ]; then
-    VERIFY_URL="http://$GATEWAY:$AGENT_PORT/api/auth/login"
-else
-    adb forward tcp:19090 tcp:$AGENT_PORT
-    VERIFY_URL="http://127.0.0.1:19090/api/auth/login"
-fi
-
-TOKEN=$(curl -sf "$VERIFY_URL" \
-    -H 'Content-Type: application/json' \
-    -d "{\"password\":\"$AGENT_PASSWORD\"}" \
-    | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["token"])')
+TOKEN=""
+for _ in $(seq 1 15); do
+    VERIFY_RESP=$(curl -sf --max-time 2 "$AGENT_URL" \
+        -H 'Content-Type: application/json' \
+        -d "$LOGIN_PAYLOAD") || true
+    TOKEN=$(printf '%s' "$VERIFY_RESP" | python3 -c '
+import sys, json
+try:
+    print(json.load(sys.stdin)["data"]["token"])
+except Exception:
+    pass
+' 2>/dev/null) || true
+    if [ -n "$TOKEN" ] && [ "$TOKEN" != "null" ]; then
+        break
+    fi
+    sleep 1
+done
 
 if [ "$USE_SSH" != true ]; then
     adb forward --remove tcp:19090 2>/dev/null || true
@@ -470,18 +496,27 @@ if [ "$SETUP_SSH" = "y" ] || [ "$SETUP_SSH" = "Y" ]; then
     # Install dropbear on device
     info "Setting up dropbear SSH server..."
 
-    # Check if dropbear is already present
-    if adb shell "test -x /usr/sbin/dropbear" 2>/dev/null; then
+    # The firmware's /usr is read-only, so keep the standalone binary in /data.
+    if remote_test "test -x $DROPBEAR_BIN"; then
         ok "Dropbear already installed."
     else
         info "Downloading dropbear for aarch64..."
-        DROPBEAR_URL="https://downloads.openwrt.org/releases/23.05.4/targets/armsr/armv8/packages/dropbear_2022.83-1_aarch64_generic.ipk"
+        DROPBEAR_URL="https://downloads.openwrt.org/releases/23.05.4/targets/mediatek/filogic/packages/dropbear_2022.82-6_aarch64_cortex-a53.ipk"
         TMPDIR=$(mktemp -d)
         curl -sfL "$DROPBEAR_URL" -o "$TMPDIR/dropbear.ipk" || fail "Failed to download dropbear."
-        adb push "$TMPDIR/dropbear.ipk" /tmp/dropbear.ipk
-        adb shell "opkg install /tmp/dropbear.ipk 2>/dev/null || true"
-        adb shell "rm -f /tmp/dropbear.ipk"
+        mkdir -p "$TMPDIR/root"
+        tar -xzf "$TMPDIR/dropbear.ipk" -C "$TMPDIR" ./data.tar.gz \
+            || fail "Failed to extract data archive from dropbear package."
+        tar -xzf "$TMPDIR/data.tar.gz" -C "$TMPDIR/root" ./usr/sbin/dropbear \
+            || fail "Failed to extract dropbear binary."
+        rpush "$TMPDIR/root/usr/sbin/dropbear" "$DROPBEAR_BIN"
         rm -rf "$TMPDIR"
+        if ! remote_test "test -x $DROPBEAR_BIN"; then
+            fail "Dropbear binary was not installed at $DROPBEAR_BIN."
+        fi
+        if ! remote_test "$DROPBEAR_BIN -V >/dev/null 2>&1"; then
+            fail "The downloaded Dropbear binary cannot run on this device."
+        fi
         ok "Dropbear installed."
     fi
 
@@ -489,7 +524,7 @@ if [ "$SETUP_SSH" = "y" ] || [ "$SETUP_SSH" = "Y" ]; then
     info "Configuring SSH keys..."
     adb shell "mkdir -p /etc/dropbear && chmod 700 /etc/dropbear"
     PUBKEY=$(cat "$SSH_PUB")
-    if adb shell "grep -qF '$PUBKEY' /etc/dropbear/authorized_keys 2>/dev/null"; then
+    if remote_test "grep -qF '$PUBKEY' /etc/dropbear/authorized_keys 2>/dev/null"; then
         ok "SSH key already authorized."
     else
         adb shell "echo '$PUBKEY' >> /etc/dropbear/authorized_keys"
@@ -499,20 +534,22 @@ if [ "$SETUP_SSH" = "y" ] || [ "$SETUP_SSH" = "Y" ]; then
 
     # Create dropbear startup script
     DROPBEAR_STARTUP=/data/local/tmp/start_dropbear.sh
-    if adb shell "test -x $DROPBEAR_STARTUP" 2>/dev/null; then
+    if remote_test "grep -qF '$DROPBEAR_BIN -p 2222 -R' $DROPBEAR_STARTUP 2>/dev/null"; then
         ok "Dropbear startup script already exists."
     else
-        adb shell "cat > $DROPBEAR_STARTUP" <<'DBBOOT'
+        DROPBEAR_STARTUP_LOCAL=$(mktemp)
+        cat > "$DROPBEAR_STARTUP_LOCAL" <<'DBBOOT'
 #!/bin/sh
-/usr/sbin/dropbear -p 2222 -R
+/data/local/tmp/dropbear -p 2222 -R
 DBBOOT
-        adb shell "chmod +x $DROPBEAR_STARTUP"
+        rpush "$DROPBEAR_STARTUP_LOCAL" "$DROPBEAR_STARTUP"
+        rm -f "$DROPBEAR_STARTUP_LOCAL"
         ok "Dropbear startup script created."
     fi
 
     # Add to rc.local if not already there
     DB_RC_LINE="sh $DROPBEAR_STARTUP"
-    if adb shell "grep -qF '$DB_RC_LINE' /etc/rc.local 2>/dev/null"; then
+    if remote_test "grep -qF '$DB_RC_LINE' /etc/rc.local 2>/dev/null"; then
         ok "Dropbear rc.local entry already configured."
     else
         adb shell "grep -q '^exit 0' /etc/rc.local \
@@ -521,8 +558,16 @@ DBBOOT
         ok "Added dropbear to /etc/rc.local."
     fi
 
+    # Some stock images ship zero-byte host-key placeholders. Dropbear's -R
+    # only generates missing keys, so remove empty placeholders before start.
+    rcmd 'for key in /etc/dropbear/dropbear_*_host_key; do
+        if [ -e "$key" ] && [ ! -s "$key" ]; then
+            rm -f "$key"
+        fi
+    done'
+
     # Start dropbear now
-    if adb shell "pidof dropbear" >/dev/null 2>&1; then
+    if remote_test "pidof dropbear >/dev/null 2>&1"; then
         ok "Dropbear already running on port $SSH_PORT."
     else
         info "Starting dropbear..."
