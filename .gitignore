@@ -1,4 +1,6 @@
 /target/
+/zte-agent/web-dist/
+/web-admin/node_modules/
 .claude/
 .agents/
 skills-lock.json

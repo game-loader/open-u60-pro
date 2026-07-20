@@ -20,6 +20,10 @@ use crate::telephony;
 use crate::usb;
 use crate::wifi;
 
+/// 嵌入的 Web 管理面板（web-admin vite 单文件构建产物）。
+/// build.rs 保证该文件存在（未构建前端时为占位页）。
+const INDEX_HTML: &str = include_str!("../web-dist/index.html");
+
 pub fn start(bind: &str, threads: usize, state: Arc<AppState>) {
     let server = match Server::http(bind) {
         Ok(s) => s,
@@ -60,6 +64,20 @@ fn handle_request(mut request: Request, state: &AppState) {
     let url = request.url().to_string();
     // Strip query string for routing
     let path = url.split('?').next().unwrap_or(&url);
+
+    // Web 管理面板：非 /api 路径一律返回嵌入的 SPA（含前端路由回退）。
+    // 静态资源无需鉴权（登录页本身也要加载）；API 鉴权在下方进行。
+    if !path.starts_with("/api") {
+        match method {
+            Method::Get => {
+                serve_index(request);
+            }
+            _ => {
+                respond(request, 405, json!({"ok": false, "error": "method not allowed"}));
+            }
+        }
+        return;
+    }
 
     // Auth check — skip for login endpoint
     let needs_auth = path != "/api/auth/login";
@@ -340,6 +358,15 @@ fn doh_cache_list(state: &AppState) -> (u16, Value) {
 fn doh_cache_clear(state: &AppState) -> (u16, Value) {
     state.doh.clear_cache();
     (200, json!({"ok": true}))
+}
+
+/// Serve the embedded admin SPA (single-file build).
+fn serve_index(request: Request) {
+    let response = Response::from_string(INDEX_HTML)
+        .with_status_code(200)
+        .with_header(Header::from_bytes("Content-Type", "text/html; charset=utf-8").unwrap())
+        .with_header(Header::from_bytes("Cache-Control", "no-cache").unwrap());
+    let _ = request.respond(response);
 }
 
 fn respond(request: Request, status: u16, body: Value) {

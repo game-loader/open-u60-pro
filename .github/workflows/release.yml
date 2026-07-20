@@ -13,6 +13,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.3.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web-admin/pnpm-lock.yaml
+
+      - name: Build web admin
+        working-directory: web-admin
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:

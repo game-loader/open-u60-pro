@@ -57,7 +57,7 @@ config backup/decryption, network customization, and more.
 
 ### On-Device Agent (`zte-agent`)
 
-A lightweight Rust HTTP server that runs directly on the router (port 9090, LAN-only). It proxies ubus calls, AT commands, and sysfs reads into a typed REST API that mobile apps consume over WiFi.
+A lightweight Rust HTTP server that runs directly on the router (port 9090, LAN-only). It proxies ubus calls, AT commands, and sysfs reads into a typed REST API that mobile apps consume over WiFi, and serves the embedded web admin panel (see below) on non-`/api` paths.
 
 ```bash
 # Cross-compile for the device
@@ -84,6 +84,21 @@ cargo build --release --target aarch64-unknown-linux-musl -p zte-agent
 | SMS Forwarding | 9 | Auto-forward rules, CRUD, test, log management |
 | System | 2 | Process list, kill bloatware |
 | Scheduler | 5 | Scheduled/recurring jobs for any API action |
+
+### Web Admin Panel (`web-admin`)
+
+A mihomo-style web dashboard served directly by the agent — no extra web server, no extra memory. The React SPA builds into a **single 450 KB HTML file** that is embedded into the binary via `include_str!` and served at `http://192.168.0.1:9090/`. Log in with the same agent password used by the mobile apps.
+
+Feature parity with the iOS app: dashboard, signal monitor, SMS + forwarding, voice calls/USSD/STK, mobile network & APN, band/cell lock, STC, WiFi + guest network, DNS/DoH, LAN, firewall, VPN, QoS, domain filter, SIM/PIN, device & charging controls, USB mode, AT terminal, speed tests, scheduler, process manager.
+
+```bash
+cd web-admin
+pnpm install
+pnpm dev    # local dev at :5173, /api proxied to the device
+pnpm build  # outputs ../zte-agent/web-dist/index.html (embedded on next cargo build)
+```
+
+`./deploy.sh <password>` builds the panel, cross-compiles the agent with the UI embedded, and deploys — then just open `http://192.168.0.1:9090/` in any browser.
 
 ### Mobile Companion Apps
 

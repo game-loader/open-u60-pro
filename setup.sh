@@ -364,6 +364,19 @@ if [ "$BUILD_CHOICE" = "1" ]; then
     chmod +x "$BINARY"
     ok "Downloaded zte-agent ($FILE_SIZE bytes)."
 else
+    # Web admin panel (embedded into the binary via include_str!)
+    if command -v pnpm >/dev/null 2>&1 || command -v npm >/dev/null 2>&1; then
+        info "Building web admin panel..."
+        if command -v pnpm >/dev/null 2>&1; then
+            (cd web-admin && { [ -d node_modules ] || pnpm install; } && pnpm build) \
+                || warn "Web panel build failed — a placeholder page will be embedded."
+        else
+            (cd web-admin && { [ -d node_modules ] || npm install; } && npm run build) \
+                || warn "Web panel build failed — a placeholder page will be embedded."
+        fi
+    else
+        warn "pnpm/npm not found — web admin panel will be a placeholder page."
+    fi
     info "Building zte-agent (this may take a few minutes on first run)..."
     cargo build --release --target "$TARGET" -p zte-agent
     ok "Build complete."
@@ -594,6 +607,7 @@ echo ""
 echo -e "${GREEN}Setup complete!${NC}"
 echo ""
 echo "  Agent API:  http://$GATEWAY:$AGENT_PORT"
+echo "  Web panel:  http://$GATEWAY:$AGENT_PORT  (login with the agent password)"
 echo "  Password:   $AGENT_PASSWORD"
 echo "  Deploy:     ./deploy.sh $AGENT_PASSWORD"
 echo ""
