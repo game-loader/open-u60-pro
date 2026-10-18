@@ -146,7 +146,7 @@ tailscale --socket=... set --accept-dns=false --accept-routes=false --hostname=u
 1. **Crash respawn:** event_bus blueprint with exponential backoff (5 s → 60 s cap).
 2. **WAN-flap hook:** the agent already subscribes to `router_event_wan_connect_status` (main.rs:53). On reconnect: wait 30 s → check status → if `Self.Online == false` or `Health != []`: run `tailscale debug rebind` then `tailscale debug restun` (LocalAPI-backed, no daemon restart — verified to exist; unstable namespace, acceptable for a pinned version) → recheck in 30 s → still bad: SIGTERM (never `kill -9`; the daemon is agent-owned, no procd involvement) and respawn.
 3. **Suspend/resume:** monitor loop detects a resume as a wall-clock gap > 2× poll interval → proactively rebind/restun, escalate to restart if unhealthy.
-4. **Wakelock policy (recommend: default ON while Tailscale is enabled).** The sleep mechanism is full Linux autosleep (`echo mem > /sys/power/autosleep`); a suspended SoC cannot answer DERP frames and there is **no network wake source** in the ZTE wake list — a sleeping node is unreachable, defeating the feature. Hold `ubus call zwrt_zte_sleep_faw.wakelock createWakelock` while enabled (plumbing already exists in `zte-agent/src/device_ext.rs:183-235`), re-create in `auto_start`, `destroyWakelock` on disable. Expose `hold_wakelock: bool` (default true) for users who prefer battery over reachability. Note the probed unit already has `sleepSwitch='0'` (auto-sleep off), so the default costs nothing there. Nuance from verification: keepalives at ~1 pkt/min do **not** hold the cellular radio in RRC-connected (5–20 s inactivity release) — the wakelock's cost is AP power, not radio time. The SDX75 modem *may* wake the AP on inbound packets (MHI/IPA wake interrupts) — checklist measures this; if inbound-wake works, the wakelock could become session-scoped.
+4. **Wakelock policy (recommend: default ON while Tailscale is enabled).** The sleep mechanism is full Linux autosleep (`echo mem > /sys/power/autosleep`); a suspended SoC cannot answer DERP frames and there is **no network wake source** in the ZTE wake list — a sleeping node is unreachable, defeating the feature. Hold `ubus call zwrt_zte_sleep_faw.wakelock createWakelock` while enabled (plumbing already exists in `zte-agent/src/device_ext.rs:183-235`), re-create in `auto_start`, `destroyWakelock` on disable. Expose `hold_wakelock: bool` (default true) for users who prefer battery over reachability. **Firmware requirement:** `createWakelock` / `destroyWakelock` require a named lock, e.g. `{"lockName":"tailscale"}`. Passing `{}` returns an error; the agent retries every poll, which is why `hold_wakelock=false` was needed before this fix. The probed unit already has `sleepSwitch='0'` (auto-sleep off), so the default costs nothing there. Nuance from verification: keepalives at ~1 pkt/min do **not** hold the cellular radio in RRC-connected (5–20 s inactivity release) — the wakelock's cost is AP power, not radio time. The SDX75 modem *may* wake the AP on inbound packets (MHI/IPA wake interrupts) — checklist measures this; if inbound-wake works, the wakelock could become session-scoped.
 5. **Timeout discipline:** every `up` carries `--timeout=30s` (default is block-forever); every CLI child gets a kill-after-20 s guard so a wedged CLI can't hang a worker thread.
 
 ### 4.6 Expiry & keys
@@ -273,7 +273,8 @@ impl TailscaleManager {
         self.running.store(true, Ordering::Relaxed);
         if self.config.lock().unwrap().hold_wakelock {
             let _ = crate::ubus::call("zwrt_zte_sleep_faw.wakelock",
-                                      "createWakelock", json!({}));
+                                      "createWakelock",
+                                      json!({"lockName": "tailscale"}));
         }
         let mgr = Arc::clone(self);
         std::thread::spawn(move || mgr.supervise());   // event_bus.rs:45-63 blueprint
@@ -473,7 +474,7 @@ uci show zwrt_sleep; cat /sys/power/autosleep; cat /sys/power/wake_lock 2>/dev/n
 
 **11.**
 ```sh
-ubus call zwrt_zte_sleep_faw.wakelock createWakelock '{}'; cat /sys/power/wake_lock; ubus call zwrt_zte_sleep_faw.wakelock destroyWakelock '{}'   # verify wakelock API behaves as documented
+ubus call zwrt_zte_sleep_faw.wakelock createWakelock '{"lockName":"tailscale"}'; cat /sys/power/wake_lock; ubus call zwrt_zte_sleep_faw.wakelock destroyWakelock '{"lockName":"tailscale"}'   # verify wakelock API behaves as documented
 ```
 
 **12.**
@@ -528,7 +529,7 @@ S0=$(cat /sys/power/suspend_stats/success 2>/dev/null); echo mem > /sys/power/au
 
 **22.**
 ```sh
-ubus call zwrt_zte_sleep_faw.wakelock createWakelock '{}'; S0=$(cat /sys/power/suspend_stats/success 2>/dev/null); echo mem > /sys/power/autosleep; sleep 600; S1=$(cat /sys/power/suspend_stats/success 2>/dev/null); echo "suspends WITH wakelock: $((S1-S0))"; echo off > /sys/power/autosleep; ubus call zwrt_zte_sleep_faw.wakelock destroyWakelock '{}'   # expect 0 suspends and zero ping gaps from the peer
+ubus call zwrt_zte_sleep_faw.wakelock createWakelock '{"lockName":"tailscale"}'; S0=$(cat /sys/power/suspend_stats/success 2>/dev/null); echo mem > /sys/power/autosleep; sleep 600; S1=$(cat /sys/power/suspend_stats/success 2>/dev/null); echo "suspends WITH wakelock: $((S1-S0))"; echo off > /sys/power/autosleep; ubus call zwrt_zte_sleep_faw.wakelock destroyWakelock '{"lockName":"tailscale"}'   # expect 0 suspends and zero ping gaps from the peer
 ```
 
 **23.**

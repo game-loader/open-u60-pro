@@ -1,5 +1,6 @@
 pub mod config;
 pub mod release;
+pub mod wakelock;
 
 pub use config::TsConfig;
 
@@ -878,7 +879,11 @@ impl TailscaleManager {
     // --- Wakelock ---
 
     fn acquire_wakelock(&self) {
-        match ubus::call("zwrt_zte_sleep_faw.wakelock", "createWakelock", Some("{}")) {
+        match ubus::call(
+            "zwrt_zte_sleep_faw.wakelock",
+            "createWakelock",
+            Some(wakelock::params().as_str()),
+        ) {
             Ok(_) => self.wakelock_held.store(true, Ordering::SeqCst),
             Err(e) => eprintln!("[tailscale] createWakelock: {e}"),
         }
@@ -888,7 +893,11 @@ impl TailscaleManager {
         if !self.wakelock_held.load(Ordering::SeqCst) {
             return;
         }
-        match ubus::call("zwrt_zte_sleep_faw.wakelock", "destroyWakelock", Some("{}")) {
+        match ubus::call(
+            "zwrt_zte_sleep_faw.wakelock",
+            "destroyWakelock",
+            Some(wakelock::params().as_str()),
+        ) {
             Ok(_) => self.wakelock_held.store(false, Ordering::SeqCst),
             Err(e) => eprintln!("[tailscale] destroyWakelock: {e}"),
         }
