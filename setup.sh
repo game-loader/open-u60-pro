@@ -34,7 +34,7 @@ REMOTE_BIN=/data/zte-agent
 STARTUP_SCRIPT=/data/local/tmp/start_zte_agent.sh
 DROPBEAR_BIN=/data/local/tmp/dropbear
 BINARY_CHANGED=false
-DOWNLOAD_URL="https://github.com/jesther-ai/open-u60-pro/releases/latest/download/zte-agent"
+DOWNLOAD_URL="https://github.com/game-loader/open-u60-pro/releases/latest/download/zte-agent"
 
 # ── Binary source menu ──────────────────────────────────────────────
 echo ""
