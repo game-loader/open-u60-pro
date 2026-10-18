@@ -20,6 +20,7 @@ Native companion apps for the ZTE U60 Pro 5G mobile router. Connect to the `zte-
 | Guest WiFi | Full | Guest network enable/disable, SSID, timer |
 | SMS | Full | Read, send, delete SMS; mark as read |
 | SIM Management | Full | PIN verify/change/enable/disable, PUK unlock, SIM unlock |
+| 9eSIM B1 / eSIM | Application flows + connection | BLE scan/connect, profile list/actions/download/export UI and unit-tested controller; verified B1 wire/LPA adapter still required |
 | Mobile Network | Full | Data toggle, airplane mode, network scan, manual register |
 | Network Mode | Full | Auto/manual network selection |
 | APN Settings | Full | Auto/manual APN mode, add/edit/delete/activate profiles |
@@ -42,6 +43,7 @@ Native companion apps for the ZTE U60 Pro 5G mobile router. Connect to the `zte-
 
 - **Pattern**: MVVM
 - **Transport**: HTTP to `zte-agent` REST API (`http://<router>:9090/api/...`)
+- **B1 Bluetooth**: Direct native phone BLE transport; independent of the router agent. See [connection implementation and protocol handoff](docs/b1-bluetooth.md).
 - **Auth**: Token-based (password → bearer token)
 
 The iOS app communicates with `zte-agent`, a lightweight Rust HTTP server deployed on the router. The agent exposes dedicated typed REST endpoints that internally call the router's ubus subsystem and return JSON responses.
@@ -52,8 +54,10 @@ The iOS app communicates with `zte-agent`, a lightweight Rust HTTP server deploy
 
 ### Requirements
 
-- iOS 16.0+
-- Xcode 15+
+- iOS 17.0+
+- Xcode 26.6 recommended (includes Swift 6.3 and the iOS 26.5 SDK)
+- XcodeGen 2.46.0 (`brew install xcodegen`)
+- Swift 5 language mode; the compiler version is supplied by Xcode
 - No external dependencies (uses only Apple frameworks)
 
 ### Tech Stack
@@ -128,14 +132,14 @@ ios/OpenU60/
 
 1. Build `zte-agent`: `cargo build --release --target aarch64-unknown-linux-musl -p zte-agent`
 2. Deploy to router via ADB or SCP (see root README for details)
-3. Open the project in Xcode
-4. Add `NSAppTransportSecurity` → `NSAllowsArbitraryLoads = YES` to `Info.plist`
+3. Run `cd mobile/ios/OpenU60 && xcodegen generate` from the repository root
+4. Open `OpenU60.xcodeproj` in Xcode. The checked-in `Resources/Info.plist` already enables local HTTP access to the router.
 5. Build and run on device or simulator
 6. Connect to the router's WiFi and set the agent URL (default: `http://192.168.0.1:9090`)
 
 ## Agent REST API
 
-The iOS app communicates exclusively through typed REST endpoints on `zte-agent`. Key endpoint groups:
+Router operations use typed REST endpoints on `zte-agent`. B1 Bluetooth uses the phone's native BLE APIs directly. Key router endpoint groups:
 
 | Group | Endpoints | Description |
 |---|---|---|
@@ -182,7 +186,7 @@ The app can decrypt and re-encrypt ZTE router configuration backup files (`.bin`
 
 ## Relation to zte-agent
 
-The mobile app connects to `zte-agent`, a lightweight Rust HTTP server deployed on the router. The agent runs directly on the device and exposes all router functionality through typed REST endpoints — the mobile app is a pure front-end with no direct ubus/AT/sysfs access.
+The mobile app connects to `zte-agent`, a lightweight Rust HTTP server deployed on the router. The agent runs directly on the device and exposes router functionality through typed REST endpoints. The phone has no direct ubus/AT/sysfs access; the B1 connection layer separately uses native Bluetooth to reach the card.
 
 ## License
 

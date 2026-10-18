@@ -4,6 +4,7 @@ struct TabBarView: View {
     let client: AgentClient
     let authManager: AuthManager
     @AppStorage("poll_interval") private var pollInterval: Double = 2.0
+    @Environment(\.scenePhase) private var scenePhase
 
     private enum Tab: Hashable { case dashboard, sms, tools, router, settings }
     @State private var selectedTab: Tab = .dashboard
@@ -54,24 +55,49 @@ struct TabBarView: View {
 
             SettingsView(client: client)
                 .tabItem {
-                    Label("Settings", systemImage: "gear")
+                    Label("Settings", systemImage: "gearshape")
                 }
                 .tag(Tab.settings)
         }
-        .task(id: DashboardPollKey(interval: pollInterval, active: selectedTab == .dashboard)) {
-            guard selectedTab == .dashboard else { return }
-            dashboardVM.startPolling(interval: pollInterval)
-            defer { dashboardVM.stopPolling() }
-            // Keep task alive until cancelled; sleep throws CancellationError, caught by try?
-            try? await Task.sleep(for: .seconds(86400 * 365))
+        .onChange(of: dashboardPollKey, initial: true) { _, key in
+            if key.active {
+                dashboardVM.startPolling(interval: key.interval)
+            } else {
+                dashboardVM.stopPolling()
+            }
         }
-        .task {
-            usbVM.startPolling(interval: 3.0)
-            defer { usbVM.stopPolling() }
-            try? await Task.sleep(for: .seconds(86400 * 365))
+        .onChange(of: isForeground, initial: true) { _, foreground in
+            if foreground {
+                usbVM.startPolling()
+            } else {
+                usbVM.stopPolling()
+            }
+        }
+        .onAppear {
+            // Reappearing with an unchanged poll key must resume loops stopped on disappear.
+            if dashboardPollKey.active { dashboardVM.startPolling(interval: pollInterval) }
+            if isForeground { usbVM.startPolling() }
+        }
+        .onDisappear {
+            dashboardVM.stopPolling()
+            usbVM.stopPolling()
         }
         .sheet(isPresented: $usbVM.showModeSheet) {
             USBModeSheetView(viewModel: usbVM)
         }
+    }
+
+    // MARK: - Polling gates
+
+    /// Polling only runs in `.active`. Pausing on `.inactive` as well covers the app switcher,
+    /// iPad multitasking and the lock transition, where the scene stays alive but nothing the
+    /// user can read is on screen; the cost is one extra immediate refresh when a short Control
+    /// Centre pull ends, which is what a returning user wants anyway.
+    private var isForeground: Bool { scenePhase == .active }
+
+    /// Restarting on any change of this key preserves the previous behaviour: the loop restarts
+    /// when the configured interval changes and stops when the dashboard is not on screen.
+    private var dashboardPollKey: DashboardPollKey {
+        DashboardPollKey(interval: pollInterval, active: isForeground && selectedTab == .dashboard)
     }
 }

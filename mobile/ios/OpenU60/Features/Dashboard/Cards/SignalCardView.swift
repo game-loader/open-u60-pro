@@ -1,16 +1,51 @@
 import SwiftUI
 
-struct SignalCardView: View {
+struct SignalCardView: View, Equatable {
     let operatorInfo: OperatorInfo
     let nrSignal: NRSignal
     let lteSignal: LTESignal
     var wcdmaSignal: WCDMASignal = .empty
     var isAirplaneMode: Bool = false
 
+    /// Everything that changes the card's *layout*, as opposed to the values inside it. Compares
+    /// the carrier fields that make up `LTECarrier.id` directly, so driving the animation no
+    /// longer builds an array of interpolated id strings on every body pass.
+    private struct LayoutKey: Equatable {
+        let showNR: Bool
+        let showLTE: Bool
+        let show3G: Bool
+        /// Swaps the placeholder between the airplane label and "No signal data", which is a
+        /// layout change of its own: it flips while every `show*` flag stays false.
+        let isAirplaneMode: Bool
+        let nrCarriers: [LTECarrier]
+        let lteCarriers: [LTECarrier]
+
+        static func == (lhs: LayoutKey, rhs: LayoutKey) -> Bool {
+            lhs.showNR == rhs.showNR
+                && lhs.showLTE == rhs.showLTE
+                && lhs.show3G == rhs.show3G
+                && lhs.isAirplaneMode == rhs.isAirplaneMode
+                && sameIdentity(lhs.nrCarriers, rhs.nrCarriers)
+                && sameIdentity(lhs.lteCarriers, rhs.lteCarriers)
+        }
+
+        private static func sameIdentity(_ lhs: [LTECarrier], _ rhs: [LTECarrier]) -> Bool {
+            lhs.count == rhs.count && zip(lhs, rhs).allSatisfy {
+                $0.label == $1.label && $0.band == $1.band
+                    && $0.pci == $1.pci && $0.earfcn == $1.earfcn
+            }
+        }
+    }
+
     var body: some View {
         let showNR = operatorInfo.showNR(nr: nrSignal)
         let showLTE = operatorInfo.showLTE(lte: lteSignal)
         let show3G = operatorInfo.show3G(nr: nrSignal, lte: lteSignal, wcdma: wcdmaSignal)
+        let layout = LayoutKey(
+            showNR: showNR, showLTE: showLTE, show3G: show3G,
+            isAirplaneMode: isAirplaneMode,
+            nrCarriers: nrSignal.sccCarriers, lteCarriers: lteSignal.sccCarriers
+        )
 
         CardView {
             VStack(alignment: .leading, spacing: 8) {
@@ -19,8 +54,8 @@ struct SignalCardView: View {
 
                 if showNR {
                     carrierRow(
-                        icon: "antenna.radiowaves.left.and.right", tech: "5G NR",
-                        band: nrSignal.band, freq: BandConfig.nrFrequency(band: nrSignal.band),
+                        icon: "cellularbars", tech: "5G NR",
+                        band: nrSignal.band,
                         technology: .nr, bandwidth: nrSignal.bandwidth,
                         isSCC: false, isPCC: !nrSignal.sccCarriers.isEmpty,
                         rsrp: nrSignal.rsrp, sinr: nrSignal.sinr,
@@ -28,8 +63,8 @@ struct SignalCardView: View {
                     )
                     ForEach(nrSignal.sccCarriers) { scc in
                         carrierRow(
-                            icon: "antenna.radiowaves.left.and.right", tech: "5G NR",
-                            band: scc.band, freq: BandConfig.nrFrequency(band: scc.band),
+                            icon: "cellularbars", tech: "5G NR",
+                            band: scc.band,
                             technology: .nr, bandwidth: scc.bandwidth,
                             isSCC: true, anchorLabel: nil, rsrp: scc.rsrp, sinr: scc.sinr,
                             pci: scc.pci
@@ -42,7 +77,7 @@ struct SignalCardView: View {
                     let lteCaActive = lteSignal.caState != "0" && !lteSignal.sccCarriers.isEmpty
                     carrierRow(
                         icon: "cellularbars", tech: "LTE",
-                        band: lteSignal.band, freq: BandConfig.lteFrequency(band: lteSignal.band),
+                        band: lteSignal.band,
                         technology: .lte, bandwidth: lteSignal.bandwidth,
                         isSCC: false, isPCC: !showNR && lteCaActive,
                         anchorLabel: showNR ? "Anchor" : nil,
@@ -53,7 +88,7 @@ struct SignalCardView: View {
                         ForEach(lteSignal.sccCarriers) { scc in
                             carrierRow(
                                 icon: "cellularbars", tech: "LTE",
-                                band: scc.band, freq: BandConfig.lteFrequency(band: scc.band),
+                                band: scc.band,
                                 technology: .lte, bandwidth: scc.bandwidth,
                                 isSCC: true, anchorLabel: nil, rsrp: scc.rsrp, sinr: scc.sinr,
                                 pci: scc.pci
@@ -79,34 +114,26 @@ struct SignalCardView: View {
                     }
                 }
             }
-            .animation(.smooth, value: nrSignal.sccCarriers.map(\.id))
-            .animation(.smooth, value: lteSignal.sccCarriers.map(\.id))
-            .animation(.smooth, value: showNR)
-            .animation(.smooth, value: showLTE)
-            .animation(.smooth, value: show3G)
+            .animation(.smooth, value: layout)
         }
     }
 
     @ViewBuilder
     private func carrierRow(
-        icon: String, tech: String, band: String, freq: String?,
+        icon: String, tech: String, band: String,
         technology: BandTechnology, bandwidth: String,
         isSCC: Bool, isPCC: Bool = false, anchorLabel: String? = nil,
         rsrp: Double?, sinr: Double?, pci: String
     ) -> some View {
-        let spec = technology.spec(for: band)
+        let spec = SignalFormat.bandNumber(band).flatMap { technology.spec(for: $0) }
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Label {
                     HStack(spacing: 4) {
                         if band.isEmpty {
                             Text(tech)
-                        } else if let spec {
-                            Text("\(tech) \u{00B7} B\(band) (\(spec.commonName), \(spec.duplexMode.rawValue))")
-                        } else if let freq {
-                            Text("\(tech) \u{00B7} Band \(band) (\(freq))")
                         } else {
-                            Text("\(tech) \u{00B7} Band \(band)")
+                            Text("\(tech) \u{00B7} \(SignalFormat.band(band, technology: technology, isPCC: false))")
                         }
                     }
                 } icon: {
@@ -178,7 +205,7 @@ struct SignalCardView: View {
     private var wcdmaRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Label("3G WCDMA", systemImage: "antenna.radiowaves.left.and.right.circle")
+                Label("3G WCDMA", systemImage: "cellularbars")
                     .font(.subheadline)
                 Spacer()
             }

@@ -8,12 +8,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import androidx.annotation.StringRes
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.openu60.R
 import com.openu60.feature.bandlock.BandLockScreen
 import com.openu60.feature.clients.ClientsScreen
 import com.openu60.feature.config.ConfigToolScreen
@@ -29,6 +32,7 @@ import com.openu60.feature.router.networkmode.NetworkModeScreen
 import com.openu60.feature.router.device.DeviceControlScreen
 import com.openu60.feature.router.lan.LANSettingsScreen
 import com.openu60.feature.router.sim.SIMScreen
+import com.openu60.feature.router.sim.b1.B1BluetoothScreen
 import com.openu60.feature.router.stc.STCScreen
 import com.openu60.feature.router.stk.STKScreen
 import com.openu60.feature.router.qos.QoSScreen
@@ -60,6 +64,7 @@ import com.openu60.feature.tools.speedtest.SpeedTestScreen
 import com.openu60.feature.usb.USBModeScreen
 
 sealed class Screen(val route: String) {
+    data object B1Bluetooth : Screen("sim/b1_bluetooth")
     // Bottom tabs
     data object Dashboard : Screen("dashboard")
     data object SMSList : Screen("sms")
@@ -126,16 +131,16 @@ sealed class Screen(val route: String) {
 
 data class BottomNavItem(
     val screen: Screen,
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector,
 )
 
 val bottomNavItems = listOf(
-    BottomNavItem(Screen.Dashboard, "Dashboard", Icons.Default.Dashboard),
-    BottomNavItem(Screen.SMSList, "SMS", Icons.Default.Sms),
-    BottomNavItem(Screen.Router, "Router", Icons.Default.Router),
-    BottomNavItem(Screen.Tools, "Tools", Icons.Default.Build),
-    BottomNavItem(Screen.Settings, "Settings", Icons.Default.Settings),
+    BottomNavItem(Screen.Dashboard, R.string.nav_dashboard, Icons.Default.Dashboard),
+    BottomNavItem(Screen.SMSList, R.string.nav_sms, Icons.Default.Sms),
+    BottomNavItem(Screen.Router, R.string.nav_router, Icons.Default.Router),
+    BottomNavItem(Screen.Tools, R.string.nav_tools, Icons.Default.Build),
+    BottomNavItem(Screen.Settings, R.string.nav_settings, Icons.Default.Settings),
 )
 
 @Composable
@@ -154,9 +159,10 @@ fun AppNavigation() {
                 NavigationBar {
                     bottomNavItems.forEach { item ->
                         val selected = currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
+                        val label = stringResource(item.labelRes)
                         NavigationBarItem(
-                            icon = { Icon(item.icon, contentDescription = item.label) },
-                            label = { Text(item.label) },
+                            icon = { Icon(item.icon, contentDescription = label) },
+                            label = { Text(label) },
                             selected = selected,
                             onClick = {
                                 navController.navigate(item.screen.route) {
@@ -204,6 +210,7 @@ fun AppNavigation() {
                     onNavigateToSignalDetect = { navController.navigate(Screen.SignalDetect.route) },
                     onNavigateToSIM = { navController.navigate(Screen.SIM.route) },
                     onNavigateToSTK = { navController.navigate(Screen.STK.route) },
+                    onNavigateToB1Bluetooth = { navController.navigate(Screen.B1Bluetooth.route) },
                     onNavigateToWiFi = { navController.navigate(Screen.WiFiSettings.route) },
                     onNavigateToGuestWiFi = { navController.navigate(Screen.GuestWiFi.route) },
                     onNavigateToAPN = { navController.navigate(Screen.APN.route) },
@@ -310,6 +317,9 @@ fun AppNavigation() {
             }
             composable(Screen.SIM.route) {
                 SIMScreen(onBack = { navController.popBackStack() })
+            }
+            composable(Screen.B1Bluetooth.route) {
+                B1BluetoothScreen(onBack = { navController.popBackStack() })
             }
             composable(Screen.STK.route) {
                 STKScreen(onBack = { navController.popBackStack() })

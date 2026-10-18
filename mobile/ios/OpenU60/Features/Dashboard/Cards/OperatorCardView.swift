@@ -1,9 +1,10 @@
 import SwiftUI
 
-struct OperatorCardView: View {
+struct OperatorCardView: View, Equatable {
     let operatorInfo: OperatorInfo
     let nrSignal: NRSignal
     let lteSignal: LTESignal
+    var padding: CGFloat = 16
 
     private var displayType: String {
         operatorInfo.networkType.isEmpty
@@ -12,7 +13,7 @@ struct OperatorCardView: View {
     }
 
     var body: some View {
-        CardView {
+        CardView(padding: padding) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(operatorInfo.provider.isEmpty ? "No Operator" : operatorInfo.provider)
@@ -28,17 +29,10 @@ struct OperatorCardView: View {
                         .foregroundStyle(.orange)
                 }
                 NetworkTypeIcon(networkType: displayType)
-                signalBarsView(bars: operatorInfo.signalBar)
-            }
-        }
-    }
-
-    private func signalBarsView(bars: Int) -> some View {
-        HStack(spacing: 2) {
-            ForEach(0..<4) { i in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(i < bars ? .primary : Color.gray.opacity(0.3))
-                    .frame(width: 4, height: CGFloat(8 + i * 4))
+                Image(systemName: "cellularbars")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(operatorInfo.signalBar > 0 ? .primary : .secondary)
+                    .accessibilityLabel(Text("Signal"))
             }
         }
     }
