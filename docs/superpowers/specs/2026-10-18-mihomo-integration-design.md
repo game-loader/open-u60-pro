@@ -431,8 +431,11 @@ tun:
     - 172.16.0.0/12
     - 192.168.0.0/16
     - 224.0.0.0/4
-    - 240.0.0.0/4
+    - 240.0.0.0/8
 ```
+
+> `240.0.0.0/8` 而不是 `/4`：设备上的 nftables 对 `/4` 的 TUN 排除路由返回
+> `netlink receive: file exists`，会导致 TUN 启动失败并回退 REDIRECT。
 
 - `include-interface` 第一版不设置；TUN 覆盖 LAN + 路由器自身流量
 - `strict-route` 保持 `false`，避免 LAN 失联

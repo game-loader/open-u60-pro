@@ -113,7 +113,10 @@ when the YAML does not provide `default-nameserver`, `nameserver`, or
 `auto` prefers TUN. Mihomo's own `auto-route` + `auto-redirect` are used, so
 there is less agent-managed firewall code. TUN covers LAN clients and the
 router's own traffic. Private/reserved destinations (including CGNAT
-`100.64.0.0/10` and the LAN range) are excluded from the TUN routes.
+`100.64.0.0/10` and the LAN range) are excluded from the TUN routes. The
+class-E exclusion is narrowed to `240.0.0.0/8`, not `/4`: this firmware's
+nftables rejects the `/4` route with `netlink receive: file exists`, which
+would make TUN fall back to REDIRECT.
 
 If `nft` is unavailable, the agent sets `DISABLE_NFTABLES=true` for mihomo.
 

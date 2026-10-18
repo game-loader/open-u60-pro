@@ -17,6 +17,8 @@ pub const IPV6_CHAIN: &str = "MIHOMO6";
 const DNSMASQ_DROPIN: &str = "/tmp/dnsmasq.d/mihomo.conf";
 const DOH_DROPIN: &str = "/tmp/dnsmasq.d/doh.conf";
 
+// iptables REDIRECT exclusions. The TUN route-exclude list uses
+// 240.0.0.0/8 instead of /4; that is a separate list in config.rs.
 const PRIVATE_ROUTES: &[&str] = &[
     "0.0.0.0/8",
     "10.0.0.0/8",

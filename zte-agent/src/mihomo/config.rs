@@ -43,7 +43,9 @@ const PRIVATE_ROUTES: &[&str] = &[
     "172.16.0.0/12",
     "192.168.0.0/16",
     "224.0.0.0/4",
-    "240.0.0.0/4",
+    // This firmware's nftables rejects 240.0.0.0/4 as an excluded TUN route
+    // with `netlink receive: file exists`; the narrower /8 is accepted.
+    "240.0.0.0/8",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -639,6 +641,16 @@ dns:
             .unwrap()
             .iter()
             .any(|v| v.as_str() == Some("100.64.0.0/10")));
+        assert!(v["tun"]["route-exclude-address"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str() == Some("240.0.0.0/8")));
+        assert!(!v["tun"]["route-exclude-address"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str() == Some("240.0.0.0/4")));
         assert_eq!(v["dns"]["listen"].as_str(), Some("127.0.0.1:1053"));
         assert_eq!(v["dns"]["nameserver"][0].as_str(), Some("9.9.9.9"));
         assert_eq!(v["proxies"][0]["name"].as_str(), Some("node-a"));
@@ -647,6 +659,23 @@ dns:
             Some("DOMAIN-SUFFIX,example.com,PROXY")
         );
         assert_eq!(effective.dns_port, 1053);
+    }
+
+    #[test]
+    fn tun_exclusions_avoid_the_nftables_eexist_range() {
+        // Regression: 240.0.0.0/4 caused `netlink receive: file exists` on
+        // this firmware and made TUN fall back to REDIRECT.
+        let (runtime, _) = build_runtime("proxies: []\n", &setting(), Mode::Tun).unwrap();
+        let v = yaml_value(&runtime);
+        let routes: Vec<&str> = v["tun"]["route-exclude-address"]
+            .as_sequence()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        assert!(routes.contains(&"240.0.0.0/8"));
+        assert!(!routes.contains(&"240.0.0.0/4"));
+        assert!(routes.contains(&"224.0.0.0/4"));
     }
 
     #[test]
