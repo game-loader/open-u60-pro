@@ -18,6 +18,7 @@ import {
   Sun,
   Moon,
   Waypoints,
+  Globe,
 } from 'lucide-react'
 import { clearToken, setUnauthorizedHandler } from '../lib/api'
 import { setTheme, getTheme } from '../lib/theme'
@@ -35,6 +36,7 @@ const NAV = [
   { to: '/device', label: '设备管理', icon: <Settings2 size={17} /> },
   { to: '/tools', label: '工具箱', icon: <Wrench size={17} /> },
   { to: '/mihomo', label: 'Mihomo', icon: <Waypoints size={17} /> },
+  { to: '/tailscale', label: 'Tailscale', icon: <Globe size={17} /> },
 ]
 
 export default function Layout() {

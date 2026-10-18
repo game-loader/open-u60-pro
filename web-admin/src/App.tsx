@@ -16,6 +16,7 @@ import SimPage from './pages/Sim'
 import DevicePage from './pages/Device'
 import ToolsPage from './pages/Tools'
 import MihomoPage from './pages/Mihomo'
+import TailscalePage from './pages/Tailscale'
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const location = useLocation()
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="device" element={<DevicePage />} />
           <Route path="tools" element={<ToolsPage />} />
           <Route path="mihomo" element={<MihomoPage />} />
+          <Route path="tailscale" element={<TailscalePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -64,7 +64,7 @@ A lightweight Rust HTTP server that runs directly on the router (port 9090, LAN-
 cargo build --release --target aarch64-unknown-linux-musl -p zte-agent
 ```
 
-**180+ endpoints across 17 categories:**
+**180+ endpoints across 18 categories:**
 
 | Category | # | Capabilities |
 |---|---|---|
@@ -85,6 +85,7 @@ cargo build --release --target aarch64-unknown-linux-musl -p zte-agent
 | System | 2 | Process list, kill bloatware |
 | Scheduler | 5 | Scheduled/recurring jobs for any API action |
 | Mihomo | 16 | Binary install/upload, YAML validation, start/stop, TUN/REDIRECT transparent gateway, DNS, logs, emergency recovery |
+| Tailscale | 9 | Remote access, auth-key/browser login, hostname, routes, SSH, wakelock, binary update, release lookup |
 
 ### Web Admin Panel (`web-admin`)
 
@@ -112,6 +113,17 @@ The **Mihomo** page installs and supervises [mihomo](https://github.com/MetaCube
 - Controller is bound to `127.0.0.1:9091` with a random secret; it cannot collide with the agent on `9090`.
 
 See [`zte-agent/docs/mihomo.md`](zte-agent/docs/mihomo.md) for setup, recovery, API and limitations.
+
+### Tailscale Remote Access
+
+The **Tailscale** page drives the agent's existing Tailscale sidecar:
+
+- Status, health, tailnet IP/DNS name, direct/relay path and key expiry
+- Enable/disable, auth-key enrollment, interactive login URL, logout
+- Hostname, advertised IPv4 routes, Tailscale SSH and "keep router awake"
+- Install/update from `pkgs.tailscale.com` with version + SHA256; the agent exposes `GET /api/tailscale/release` so the browser can resolve the latest arm64 tarball without CORS issues
+
+Warnings cover key expiry, wakelock failures, pinned/client version mismatch, pending machine approval, and the fact that disabling/logging out/updating over a Tailscale session will drop that session.
 
 ### Mobile Companion Apps
 

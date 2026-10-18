@@ -412,6 +412,7 @@ pub fn route(method: &Method, path: &str, state: &AppState, body: &[u8]) -> (u16
         (&Method::Post, "/api/doh/cache/clear") => doh_cache_clear(state),
         // Tailscale remote management
         (&Method::Get, "/api/tailscale/status") => tailscale::status(state),
+        (&Method::Get, "/api/tailscale/release") => tailscale::release::handler(),
         (&Method::Post, "/api/tailscale/setup") => tailscale::setup(state, body),
         (&Method::Post, "/api/tailscale/login-url") => tailscale::login_url(state),
         (&Method::Post, "/api/tailscale/enable") => tailscale::enable(state),

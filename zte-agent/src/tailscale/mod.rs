@@ -1,4 +1,5 @@
 pub mod config;
+pub mod release;
 
 pub use config::TsConfig;
 
