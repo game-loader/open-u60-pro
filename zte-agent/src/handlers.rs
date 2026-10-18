@@ -25,6 +25,7 @@ pub struct AppState {
     pub charge_limit: Arc<ChargeLimitEnforcer>,
     pub sms_forward: Arc<SmsForwarder>,
     pub tailscale: Arc<crate::tailscale::TailscaleManager>,
+    pub mihomo: Arc<crate::mihomo::MihomoManager>,
     /// Single-flight TTL cache in front of the `ubus` CLI (see cache.rs).
     pub cache: Arc<UbusCache>,
     pub oos_policy: Arc<crate::oos_policy::OosPolicy>,
@@ -52,6 +53,7 @@ impl AppState {
             charge_limit: Arc::new(ChargeLimitEnforcer::new()),
             sms_forward: Arc::new(SmsForwarder::new()),
             tailscale: Arc::new(crate::tailscale::TailscaleManager::new()),
+            mihomo: Arc::new(crate::mihomo::MihomoManager::new()),
             cache: Arc::new(UbusCache::new()),
             oos_policy: Arc::new(crate::oos_policy::OosPolicy::new()),
             conn_watchdog: Arc::new(crate::conn_watchdog::ConnWatchdog::new()),

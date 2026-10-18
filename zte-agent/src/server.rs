@@ -11,6 +11,7 @@ use crate::device_ext;
 use crate::lan_test;
 use crate::scheduler;
 use crate::handlers::{self, AppState};
+use crate::mihomo;
 use crate::modem_ext;
 use crate::network_ext;
 use crate::oos_policy;
@@ -168,12 +169,42 @@ fn handle_request(mut request: Request, state: &AppState) {
         return;
     }
 
-    // Read body
+    // Mihomo binary upload streams straight to disk; handle before the body
+    // is read. Logs need the query string, which `route` does not receive.
+    if method == Method::Post && path == "/api/mihomo/install/upload" {
+        let (status, body_json) = mihomo::handlers::install_upload(&mut request, state);
+        respond(request, status, body_json);
+        return;
+    }
+    if method == Method::Get && path == "/api/mihomo/logs" {
+        let lines = parse_query_usize(&url, "lines").unwrap_or(200);
+        let (status, body_json) = mihomo::handlers::logs(state, lines);
+        respond(request, status, body_json);
+        return;
+    }
+    if method == Method::Get && path == "/api/mihomo/capabilities" {
+        let (status, body_json) = if url.contains("force=1") {
+            mihomo::handlers::capabilities_force(state)
+        } else {
+            mihomo::handlers::capabilities(state)
+        };
+        respond(request, status, body_json);
+        return;
+    }
+
+    // Read body, with tight limits for the paths that accept raw YAML.
     let mut body = Vec::new();
     if path.starts_with("/api/live-activity") {
         let _ = std::io::Read::read_to_end(&mut request.as_reader().take(4097), &mut body);
         if body.len() > 4096 {
             respond(request, 413, json!({"ok": false, "error": "body too large"}));
+            return;
+        }
+    } else if path == "/api/mihomo/config" || path == "/api/mihomo/config/validate" {
+        let limit = mihomo::config::MAX_CONFIG_BYTES;
+        let _ = std::io::Read::read_to_end(&mut request.as_reader().take((limit + 1) as u64), &mut body);
+        if body.len() > limit {
+            respond(request, 413, json!({"ok": false, "error": "config too large"}));
             return;
         }
     } else {
@@ -200,6 +231,20 @@ pub fn route(method: &Method, path: &str, state: &AppState, body: &[u8]) -> (u16
         (&Method::Get, "/api/live-activity") => state.live_activity.status(),
         (&Method::Put, "/api/live-activity") => state.live_activity.register(body),
         (&Method::Delete, "/api/live-activity") => state.live_activity.unregister(),
+        // Mihomo
+        (&Method::Get, "/api/mihomo/status") => mihomo::handlers::status(state),
+        (&Method::Get, "/api/mihomo/config") => mihomo::handlers::config_get(state),
+        (&Method::Put, "/api/mihomo/config") => mihomo::handlers::config_set(state, body),
+        (&Method::Post, "/api/mihomo/config/validate") => mihomo::handlers::config_validate(state, body),
+        (&Method::Get, "/api/mihomo/settings") => mihomo::handlers::settings_get(state),
+        (&Method::Put, "/api/mihomo/settings") => mihomo::handlers::settings_set(state, body),
+        (&Method::Post, "/api/mihomo/start") => mihomo::handlers::start(state),
+        (&Method::Post, "/api/mihomo/stop") => mihomo::handlers::stop(state),
+        (&Method::Post, "/api/mihomo/restart") => mihomo::handlers::restart(state),
+        (&Method::Post, "/api/mihomo/panic") => mihomo::handlers::panic(state),
+        (&Method::Post, "/api/mihomo/safe-mode/clear") => mihomo::handlers::safe_mode_clear(state),
+        (&Method::Post, "/api/mihomo/logs/clear") => mihomo::handlers::logs_clear(state),
+        (&Method::Post, "/api/mihomo/install/download") => mihomo::handlers::install_download(state, body),
         // Auth
         (&Method::Post, "/api/auth/login") => handlers::login(state, body),
         // Device info (sysfs)
@@ -409,6 +454,12 @@ fn doh_config_set(state: &AppState, body: &[u8]) -> (u16, Value) {
 }
 
 fn doh_enable(state: &AppState) -> (u16, Value) {
+    if state.mihomo.dns_override_active() {
+        return (
+            409,
+            json!({"ok": false, "error": "Mihomo transparent DNS is active; stop it first"}),
+        );
+    }
     if let Err(e) = state.doh.start() {
         return (500, json!({"ok": false, "error": e}));
     }
@@ -424,6 +475,7 @@ fn doh_enable(state: &AppState) -> (u16, Value) {
 }
 
 fn doh_disable(state: &AppState) -> (u16, Value) {
+    state.mihomo.discard_paused_doh();
     state.doh.stop();
     dnsmasq_restore_defaults();
     state.doh.set_enabled(false);

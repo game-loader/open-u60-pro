@@ -1,10 +1,14 @@
 # Mihomo 集成设计
 
-- **状态**: 待 review（设计已确认，实施前评审）
+- **状态**: 已实现（2026-10-18），真实设备透明代理待实测
 - **日期**: 2026-10-18
 - **仓库**: `game-loader/open-u60-pro`
 - **涉及组件**: `zte-agent`（Rust）、`web-admin`（React/Vite）
 - **目标设备**: ZTE U60 Pro (MU5250)，aarch64，OpenWrt 23.05 / ZWRT
+
+> 实现状态：设备端模块、REST API、Web 面板、单元测试和交叉编译已完成。真实设备上的
+> TUN/iptables/REDIRECT、DNS 接管和回滚仍需按 §15.4 清单实测；本机运行测试使用 amd64
+> mihomo 验证了配置、启停、自启、安全模式和 API，未在 aarch64 真机上执行。
 
 ---
 
@@ -623,7 +627,7 @@ DNS 健康检查：
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/mihomo/status` | 安装、运行、模式、健康、内存、最近错误 |
-| GET | `/api/mihomo/capabilities` | TUN/iptables/nft/dnsmasq/LAN 接口探测 |
+| GET | `/api/mihomo/capabilities` | TUN/iptables/nft/dnsmasq/LAN 接口探测（带缓存；`?force=1` 强制刷新） |
 | GET | `/api/mihomo/config` | 返回原始 YAML、路径、大小、修改时间、校验状态 |
 | PUT | `/api/mihomo/config` | 保存原始 YAML；要求校验通过；大小 ≤ 1 MiB |
 | POST | `/api/mihomo/config/validate` | 只校验，不保存 |
@@ -633,6 +637,7 @@ DNS 健康检查：
 | POST | `/api/mihomo/stop` | 停止并恢复网络 |
 | POST | `/api/mihomo/restart` | 停止 + 启动 |
 | POST | `/api/mihomo/panic` | 紧急恢复网络并关闭自启 |
+| POST | `/api/mihomo/safe-mode/clear` | 清除安全模式标记 |
 | GET | `/api/mihomo/logs?lines=200` | 返回最后 N 行；上限 2000 |
 | POST | `/api/mihomo/logs/clear` | 清空日志 |
 | POST | `/api/mihomo/install/upload` | 原始/ gzip 二进制上传；流式处理 |

@@ -96,3 +96,76 @@ export async function fetchAll<T extends Record<string, () => Promise<any>>>(
   })
   return out
 }
+
+
+/** 原始 body 请求（YAML 等非 JSON 内容） */
+export async function requestRaw<T = any>(
+  method: string,
+  path: string,
+  body: BodyInit,
+  contentType: string,
+): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': contentType }
+  const token = getToken()
+  if (token) headers['Authorization'] = `Bearer ${token}`
+  let res: Response
+  try {
+    res = await fetch(path, { method, headers, body })
+  } catch {
+    throw new ApiError('无法连接设备，请检查网络', 0)
+  }
+  let json: any = null
+  try {
+    json = await res.json()
+  } catch {
+    /* 非 JSON */
+  }
+  if (res.status === 401) {
+    clearToken()
+    onUnauthorized?.()
+    throw new ApiError(json?.error || '登录已过期，请重新登录', 401)
+  }
+  if (!res.ok || json?.ok === false) {
+    throw new ApiError(json?.error || `请求失败 (${res.status})`, res.status)
+  }
+  return (json?.data ?? json) as T
+}
+
+/** 二进制上传（XHR 以便显示进度） */
+export function uploadBinary<T = any>(
+  path: string,
+  file: Blob,
+  onProgress?: (percent: number) => void,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', path)
+    xhr.setRequestHeader('Content-Type', 'application/octet-stream')
+    const token = getToken()
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && onProgress) onProgress(Math.round((ev.loaded / ev.total) * 100))
+    }
+    xhr.onerror = () => reject(new ApiError('上传失败：网络错误', 0))
+    xhr.onload = () => {
+      let json: any = null
+      try {
+        json = JSON.parse(xhr.responseText)
+      } catch {
+        /* 非 JSON */
+      }
+      if (xhr.status === 401) {
+        clearToken()
+        onUnauthorized?.()
+        reject(new ApiError(json?.error || '登录已过期，请重新登录', 401))
+        return
+      }
+      if (xhr.status < 200 || xhr.status >= 300 || json?.ok === false) {
+        reject(new ApiError(json?.error || `上传失败 (${xhr.status})`, xhr.status))
+        return
+      }
+      resolve((json?.data ?? json) as T)
+    }
+    xhr.send(file)
+  })
+}

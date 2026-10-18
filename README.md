@@ -64,7 +64,7 @@ A lightweight Rust HTTP server that runs directly on the router (port 9090, LAN-
 cargo build --release --target aarch64-unknown-linux-musl -p zte-agent
 ```
 
-**143 endpoints across 16 categories:**
+**180+ endpoints across 17 categories:**
 
 | Category | # | Capabilities |
 |---|---|---|
@@ -84,10 +84,11 @@ cargo build --release --target aarch64-unknown-linux-musl -p zte-agent
 | SMS Forwarding | 9 | Auto-forward rules, CRUD, test, log management |
 | System | 2 | Process list, kill bloatware |
 | Scheduler | 5 | Scheduled/recurring jobs for any API action |
+| Mihomo | 16 | Binary install/upload, YAML validation, start/stop, TUN/REDIRECT transparent gateway, DNS, logs, emergency recovery |
 
 ### Web Admin Panel (`web-admin`)
 
-A mihomo-style web dashboard served directly by the agent — no extra web server, no extra memory. The React SPA builds into a **single 450 KB HTML file** that is embedded into the binary via `include_str!` and served at `http://192.168.0.1:9090/`. Log in with the same agent password used by the mobile apps.
+A mihomo-style web dashboard served directly by the agent — no extra web server, no extra memory. The React SPA builds into a **single ~475 KB HTML file** that is embedded into the binary via `include_str!` and served at `http://192.168.0.1:9090/`. Log in with the same agent password used by the mobile apps.
 
 Feature parity with the iOS app: dashboard, signal monitor, SMS + forwarding, voice calls/USSD/STK, mobile network & APN, band/cell lock, STC, WiFi + guest network, DNS/DoH, LAN, firewall, VPN, QoS, domain filter, SIM/PIN, device & charging controls, USB mode, AT terminal, speed tests, scheduler, process manager.
 
@@ -99,6 +100,18 @@ pnpm build  # outputs ../zte-agent/web-dist/index.html (embedded on next cargo b
 ```
 
 `./deploy.sh <password>` builds the panel, cross-compiles the agent with the UI embedded, and deploys — then just open `http://192.168.0.1:9090/` in any browser.
+
+### Mihomo Integration
+
+The **Mihomo** page installs and supervises [mihomo](https://github.com/MetaCubeX/mihomo) on the router without bundling a 55 MB proxy binary in the agent. Upload an aarch64 ELF/`.gz`, or download the pinned `v1.19.32` release with SHA256 verification.
+
+- Edit the original `config.yaml` in the browser; the agent generates a separate runtime copy and validates it with `mihomo -t`.
+- Start/stop/restart independently of **开机自启**. Both are **off by default**; a fresh install and a reboot do not start mihomo.
+- Transparent gateway: TUN first (`auto-route` + `auto-redirect`), automatic REDIRECT fallback for LAN IPv4 TCP, dnsmasq DNS takeover, optional QUIC/IPv6 blocking.
+- Health checks roll back routing/firewall/DNS on failure. A `pending` marker, safe mode, and `/data/mihomo/panic.sh` handle lockout recovery.
+- Controller is bound to `127.0.0.1:9091` with a random secret; it cannot collide with the agent on `9090`.
+
+See [`zte-agent/docs/mihomo.md`](zte-agent/docs/mihomo.md) for setup, recovery, API and limitations.
 
 ### Mobile Companion Apps
 

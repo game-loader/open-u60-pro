@@ -12,6 +12,7 @@ mod event_bus;
 mod handlers;
 mod lan_test;
 mod live_activity;
+mod mihomo;
 mod modem_ext;
 mod network_ext;
 mod oos_policy;
@@ -98,6 +99,7 @@ fn main() {
     state.sms_forward.start(sms_rx, service_rx, wan_status_rx);
     state.tailscale.auto_start();
     state.tailscale.start_wan_watch(ts_wan_rx);
+    state.mihomo.auto_start();
     state.oos_policy.start(
         Box::new(oos_policy::DeviceEffects::new(Arc::clone(&state))),
         busy_check(&state),

@@ -15,6 +15,7 @@ import RouterPage from './pages/Router'
 import SimPage from './pages/Sim'
 import DevicePage from './pages/Device'
 import ToolsPage from './pages/Tools'
+import MihomoPage from './pages/Mihomo'
 
 function RequireAuth({ children }: { children: React.ReactElement }) {
   const location = useLocation()
@@ -48,6 +49,7 @@ export default function App() {
           <Route path="sim" element={<SimPage />} />
           <Route path="device" element={<DevicePage />} />
           <Route path="tools" element={<ToolsPage />} />
+          <Route path="mihomo" element={<MihomoPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
