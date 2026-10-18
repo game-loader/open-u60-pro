@@ -165,6 +165,8 @@ All endpoints require the normal Bearer token.
 | GET | `/api/mihomo/status` | process, mode, config, controller, memory |
 | GET | `/api/mihomo/capabilities` | cached TUN/iptables/nft/dnsmasq probe |
 | GET | `/api/mihomo/capabilities?force=1` | refresh the probe |
+| GET | `/api/mihomo/proxies` | proxy groups and current node |
+| PUT | `/api/mihomo/proxies` | select a node: `{group, name}` |
 | GET | `/api/mihomo/config` | original YAML and metadata |
 | PUT | `/api/mihomo/config` | save raw YAML (validated) |
 | POST | `/api/mihomo/config/validate` | validate raw YAML |
@@ -200,7 +202,7 @@ All endpoints require the normal Bearer token.
 
 - First version supports the Web panel only; the mobile apps do not have a
   Mihomo page.
-- No subscription URL, node switching, or mihomo's own dashboard.
+- No subscription URL, delay testing, or mihomo's own dashboard. Node switching is available for `type: select` groups.
 - REDIRECT fallback proxies LAN IPv4 TCP only. It does not proxy UDP or IPv6,
   and it does not proxy the router's own traffic.
 - TUN/route behaviour depends on the device kernel and QCMAP; the agent probes

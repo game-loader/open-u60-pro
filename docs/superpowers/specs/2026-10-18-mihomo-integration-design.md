@@ -45,7 +45,7 @@
 
 - iOS / Android 的 Mihomo 页面
 - 订阅 URL 拉取、定时更新
-- 代理组/节点列表、延迟测试、节点切换
+- 代理组延迟测试（节点切换已支持 `type: select` 组）
 - mihomo 自带的 Web Dashboard（metacubexd/yacd）
 - 按设备/按 MAC/按域名分流的可视化规则编辑器
 - REDIRECT 回退模式下的 IPv6 透明代理和 UDP/QUIC 代理
@@ -628,6 +628,8 @@ DNS 健康检查：
 |---|---|---|
 | GET | `/api/mihomo/status` | 安装、运行、模式、健康、内存、最近错误 |
 | GET | `/api/mihomo/capabilities` | TUN/iptables/nft/dnsmasq/LAN 接口探测（带缓存；`?force=1` 强制刷新） |
+| GET | `/api/mihomo/proxies` | 代理组和当前节点 |
+| PUT | `/api/mihomo/proxies` | 切换节点：`{group, name}` |
 | GET | `/api/mihomo/config` | 返回原始 YAML、路径、大小、修改时间、校验状态 |
 | PUT | `/api/mihomo/config` | 保存原始 YAML；要求校验通过；大小 ≤ 1 MiB |
 | POST | `/api/mihomo/config/validate` | 只校验，不保存 |
@@ -723,6 +725,12 @@ DNS 健康检查：
 - dnsmasq 是否运行
 - LAN 接口列表
 - 探测失败原因与建议
+
+### 12.2a 代理组 / 节点卡
+
+- 列出 `proxies` 中带 `all` 的代理组
+- `type: selector` 组提供节点下拉切换；其他组只显示当前节点
+- 切换失败时回读控制器状态
 
 ### 12.3 配置卡
 
@@ -948,6 +956,7 @@ DNS 健康检查：
 - [ ] 默认重启后 mihomo 不运行
 - [ ] Web 面板可安装/替换 mihomo 二进制
 - [ ] 可编辑、校验、保存、上传、下载 YAML
+- [ ] 可在 selector 组中切换节点
 - [ ] 可启动/停止/重启 direct 模式
 - [ ] 可单独开关“开机自启”
 - [ ] TUN 透明模式可让 LAN 客户端经代理上网

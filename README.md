@@ -84,7 +84,7 @@ cargo build --release --target aarch64-unknown-linux-musl -p zte-agent
 | SMS Forwarding | 9 | Auto-forward rules, CRUD, test, log management |
 | System | 2 | Process list, kill bloatware |
 | Scheduler | 5 | Scheduled/recurring jobs for any API action |
-| Mihomo | 16 | Binary install/upload, YAML validation, start/stop, TUN/REDIRECT transparent gateway, DNS, logs, emergency recovery |
+| Mihomo | 18 | Binary install/upload, YAML validation, start/stop, proxy group/node selection, TUN/REDIRECT transparent gateway, DNS, logs, emergency recovery |
 | Tailscale | 9 | Remote access, auth-key/browser login, hostname, routes, SSH, wakelock, binary update, release lookup |
 
 ### Web Admin Panel (`web-admin`)
@@ -107,6 +107,7 @@ pnpm build  # outputs ../zte-agent/web-dist/index.html (embedded on next cargo b
 The **Mihomo** page installs and supervises [mihomo](https://github.com/MetaCubeX/mihomo) on the router without bundling a 55 MB proxy binary in the agent. Upload an aarch64 ELF/`.gz`, or download the pinned `v1.19.32` release with SHA256 verification.
 
 - Edit the original `config.yaml` in the browser; the agent generates a separate runtime copy and validates it with `mihomo -t`.
+- Switch nodes in `type: select` proxy groups; other group types are shown read-only.
 - Start/stop/restart independently of **开机自启**. Both are **off by default**; a fresh install and a reboot do not start mihomo.
 - Transparent gateway: TUN first (`auto-route` + `auto-redirect`), automatic REDIRECT fallback for LAN IPv4 TCP, dnsmasq DNS takeover, optional QUIC/IPv6 blocking.
 - Health checks roll back routing/firewall/DNS on failure. A `pending` marker, safe mode, and `/data/mihomo/panic.sh` handle lockout recovery.

@@ -92,14 +92,33 @@ type Capabilities = {
   lan_interfaces: string[]
 }
 
+type ProxyGroup = {
+  name: string
+  type: string
+  now: string | null
+  all: string[]
+  selectable: boolean
+}
+
+type ProxyData = {
+  groups: ProxyGroup[]
+  count: number
+}
+
 const DEFAULT_VERSION = 'v1.19.32'
 const DEFAULT_SHA = '9dd862e28b46ff7d775f169cceebc28deccaa0a9e804237d421cd2571e0caba0'
 
 export default function MihomoPage() {
   const statusPoll = usePolledData<StatusData>(() => api.get('/api/mihomo/status'), 5000)
   const capsPoll = usePolledData<Capabilities>(() => api.get('/api/mihomo/capabilities'), 30000)
+  const proxiesPoll = usePolledData<ProxyData>(
+    () => api.get('/api/mihomo/proxies'),
+    10000,
+    !!statusPoll.data?.running,
+  )
   const status = statusPoll.data
   const caps = capsPoll.data
+  const proxyData = proxiesPoll.data
 
   const [settings, setSettings] = useState<SettingsData | null>(null)
   const [configText, setConfigText] = useState('')
@@ -110,6 +129,7 @@ export default function MihomoPage() {
   const [configBusy, setConfigBusy] = useState('')
   const [logsBusy, setLogsBusy] = useState(false)
   const [capsBusy, setCapsBusy] = useState(false)
+  const [proxyBusy, setProxyBusy] = useState('')
   const [confirmTransparent, setConfirmTransparent] = useState(false)
   const [confirmPanic, setConfirmPanic] = useState(false)
   const [installFile, setInstallFile] = useState<File | null>(null)
@@ -217,6 +237,21 @@ export default function MihomoPage() {
 
   const setMode = (mode: string) =>
     updateSettings({ transparent_mode: mode }, `已切换为 ${mode} 模式`)
+
+  const selectProxy = async (group: string, name: string) => {
+    if (!name) return
+    setProxyBusy(group)
+    try {
+      await api.put('/api/mihomo/proxies', { group, name })
+      toast.success(`已切换到 ${name}`)
+      await proxiesPoll.refresh()
+    } catch (e: any) {
+      toast.error(e.message)
+      await proxiesPoll.refresh()
+    } finally {
+      setProxyBusy('')
+    }
+  }
 
   const clearSafeMode = () =>
     run('safe', async () => {
@@ -493,6 +528,78 @@ export default function MihomoPage() {
           </div>
         </Card>
       </div>
+
+      <Card
+        title="代理组 / 节点"
+        icon={<Waypoints size={17} />}
+        extra={
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<RefreshCw size={13} />}
+            loading={proxiesPoll.loading}
+            disabled={!running}
+            onClick={() => void proxiesPoll.refresh()}
+          >
+            刷新
+          </Button>
+        }
+      >
+        {!running ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            启动 mihomo 后可以在这里切换代理组的节点。
+          </p>
+        ) : proxiesPoll.loading && !proxyData ? (
+          <Spinner text="加载代理组…" />
+        ) : proxiesPoll.error ? (
+          <ErrorBox error={proxiesPoll.error} onRetry={() => void proxiesPoll.refresh()} />
+        ) : !proxyData?.groups?.length ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            当前配置没有代理组。请在 YAML 中添加 <code>proxy-groups</code>（例如 <code>type: select</code>）。
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {proxyData.groups.map((group) => {
+              const options =
+                group.now && !group.all.includes(group.now)
+                  ? [group.now, ...group.all]
+                  : group.all
+              return (
+                <div
+                  key={group.name}
+                  className="rounded-xl border border-slate-200/70 bg-slate-50/60 p-3 dark:border-white/5 dark:bg-white/5"
+                >
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-sm font-medium text-slate-800 dark:text-slate-100">
+                      {group.name}
+                    </span>
+                    <Badge tone={group.selectable ? 'brand' : 'slate'}>{group.type || 'unknown'}</Badge>
+                    <span className="text-xs text-slate-400">{group.all.length} 个节点</span>
+                  </div>
+                  {group.selectable ? (
+                    <Select
+                      value={group.now ?? ''}
+                      onChange={(e) => void selectProxy(group.name, e.target.value)}
+                      disabled={proxyBusy === group.name}
+                    >
+                      <option value="">-- 选择节点 --</option>
+                      {options.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : (
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      当前：{group.now || '--'}（该组类型不支持手动切换）
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
 
       <Card
         title="Mihomo 配置"

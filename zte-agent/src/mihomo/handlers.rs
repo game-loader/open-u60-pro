@@ -17,7 +17,7 @@ fn error(status: u16, message: impl Into<String>) -> (u16, Value) {
 }
 
 fn map_op_error(message: String) -> (u16, Value) {
-    if message.contains("not installed") {
+    if message.contains("not installed") || message.contains("not running") {
         error(503, message)
     } else if message.contains("too large") {
         error(413, message)
@@ -27,7 +27,7 @@ fn map_op_error(message: String) -> (u16, Value) {
 }
 
 fn map_config_error(message: String) -> (u16, Value) {
-    if message.contains("not installed") {
+    if message.contains("not installed") || message.contains("not running") {
         error(503, message)
     } else if message.contains("too large") {
         error(413, message)
@@ -60,6 +60,32 @@ pub fn settings_set(state: &AppState, body: &[u8]) -> (u16, Value) {
     match state.mihomo.update_settings(&patch) {
         Ok(v) => ok(v),
         Err(e) => error(400, e),
+    }
+}
+
+pub fn proxies(state: &AppState) -> (u16, Value) {
+    match state.mihomo.proxies() {
+        Ok(v) => ok(v),
+        Err(e) => map_op_error(e),
+    }
+}
+
+pub fn proxy_select(state: &AppState, body: &[u8]) -> (u16, Value) {
+    let parsed: Value = match serde_json::from_slice(body) {
+        Ok(v) => v,
+        Err(_) => return error(400, "invalid JSON"),
+    };
+    let group = parsed["group"].as_str().unwrap_or("").trim();
+    let name = parsed["name"].as_str().unwrap_or("").trim();
+    if group.is_empty() || group.len() > 256 {
+        return error(400, "missing or invalid group");
+    }
+    if name.is_empty() || name.len() > 256 {
+        return error(400, "missing or invalid name");
+    }
+    match state.mihomo.select_proxy(group, name) {
+        Ok(v) => ok(v),
+        Err(e) => map_op_error(e),
     }
 }
 

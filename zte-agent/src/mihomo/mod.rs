@@ -3,6 +3,7 @@ pub mod config;
 pub mod controller;
 pub mod handlers;
 pub mod network;
+pub mod proxies;
 
 use std::fs::{self, OpenOptions};
 use std::os::unix::fs::PermissionsExt;
@@ -1205,6 +1206,46 @@ impl MihomoManager {
                 }
             }
         }
+    }
+
+    fn controller_auth(&self) -> Result<(u16, String), String> {
+        let inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let alive = inner
+            .proc
+            .as_ref()
+            .map(|p| network::pid_alive(p.pid()))
+            .unwrap_or(false);
+        if !alive {
+            return Err("mihomo is not running".to_string());
+        }
+        Ok((
+            inner.settings.controller_port,
+            inner.settings.controller_secret.clone(),
+        ))
+    }
+
+    pub fn proxies(&self) -> Result<Value, String> {
+        let (port, secret) = self.controller_auth()?;
+        let value = controller::get_json(
+            port,
+            &secret,
+            "/proxies",
+            std::time::Duration::from_secs(5),
+        )?;
+        Ok(proxies::build_proxy_groups(&value))
+    }
+
+    pub fn select_proxy(&self, group: &str, name: &str) -> Result<Value, String> {
+        let (port, secret) = self.controller_auth()?;
+        let path = format!("/proxies/{}", controller::encode_path_segment(group));
+        controller::put_json(
+            port,
+            &secret,
+            &path,
+            &json!({"name": name}),
+            std::time::Duration::from_secs(10),
+        )?;
+        self.proxies()
     }
 
     pub fn settings_json_for_api(&self) -> Value {

@@ -233,6 +233,8 @@ pub fn route(method: &Method, path: &str, state: &AppState, body: &[u8]) -> (u16
         (&Method::Delete, "/api/live-activity") => state.live_activity.unregister(),
         // Mihomo
         (&Method::Get, "/api/mihomo/status") => mihomo::handlers::status(state),
+        (&Method::Get, "/api/mihomo/proxies") => mihomo::handlers::proxies(state),
+        (&Method::Put, "/api/mihomo/proxies") => mihomo::handlers::proxy_select(state, body),
         (&Method::Get, "/api/mihomo/config") => mihomo::handlers::config_get(state),
         (&Method::Put, "/api/mihomo/config") => mihomo::handlers::config_set(state, body),
         (&Method::Post, "/api/mihomo/config/validate") => mihomo::handlers::config_validate(state, body),
